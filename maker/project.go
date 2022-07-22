@@ -82,7 +82,7 @@ func mainfile(fs fs.FS, path, projectName string) error {
 		return err
 	}
 
-	tmpl, err := fs.Open("templates/main.go")
+	tmpl, err := fs.Open("templates/main.go.tmpl")
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func defaultHTTPRoutes(fs fs.FS, path string) error {
 }
 
 func defaultHomepage(fs fs.FS, path string) error {
-	err := os.Mkdir(filepath.Join(path, "template"), 0777)
+	err := os.Mkdir(filepath.Join(path, "templates"), 0777)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func defaultHomepage(fs fs.FS, path string) error {
 		return err
 	}
 
-	tmpl, err := fs.Open("templates/index.html")
+	tmpl, err := fs.Open("templates/views/index.html")
 	if err != nil {
 		return err
 	}

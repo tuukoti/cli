@@ -1,14 +1,17 @@
 package maker
 
 import (
+	"bytes"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
-func Project(fs fs.FS, name string) error {
+func Project(fs fs.FS, pkgURL string) error {
+	name := filepath.Base(pkgURL)
+
 	_, err := os.Stat(name)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -30,7 +33,7 @@ func Project(fs fs.FS, name string) error {
 		return fmt.Errorf("failed to create the project folder, %w", err)
 	}
 
-	err = makeProject(fs, absPath, name)
+	err = makeProject(fs, absPath, pkgURL, name)
 	if err != nil {
 		rerr := os.RemoveAll(absPath)
 		if rerr != nil {
@@ -43,24 +46,73 @@ func Project(fs fs.FS, name string) error {
 	return nil
 }
 
-func makeProject(fs fs.FS, absPath, name string) error {
-	// check if folder already exists
-	err := mainfile(fs, absPath, name)
+func makeProject(fs fs.FS, absPath, pkgURL, name string) error {
+	// main file
+	err := copyFile(
+		fs,
+		"templates/main.go.tmpl",
+		filepath.Join(absPath, "cmd", name, "main.go"),
+		func(t []byte) ([]byte, error) {
+			return bytes.ReplaceAll(t, []byte("{{resources_pkg}}"), []byte(pkgURL+"/resources")), nil
+		},
+	)
 	if err != nil {
 		return err
 	}
 
-	err = defaultHTTPRoutes(fs, absPath)
+	// resources
+	err = copyFile(
+		fs,
+		"templates/resources/resources.go",
+		filepath.Join(absPath, "resources", "resources.go"),
+		nil,
+	)
 	if err != nil {
 		return err
 	}
 
-	err = defaultHomepage(fs, absPath)
+	err = copyFile(
+		fs,
+		"templates/resources/default.go",
+		filepath.Join(absPath, "resources", "default.go"),
+		nil,
+	)
 	if err != nil {
 		return err
 	}
 
-	err = defaultConfig(fs, absPath)
+	// config file
+	err = copyFile(
+		fs,
+		"templates/config.yml",
+		filepath.Join(absPath, "config.yml"),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	// default html files
+	err = copyFile(
+		fs,
+		"templates/views/index.html",
+		filepath.Join(absPath, "views", "index.html"),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command("go", "mod", "init", pkgURL)
+	cmd.Dir = absPath
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	cmd = exec.Command("go", "mod", "tidy")
+	cmd.Dir = absPath
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}
@@ -69,25 +121,40 @@ func makeProject(fs fs.FS, absPath, name string) error {
 
 }
 
-func mainfile(fs fs.FS, path, projectName string) error {
-	path = filepath.Join(path, "cmd", projectName)
+type modifierFunc func(t []byte) ([]byte, error)
 
-	err := os.MkdirAll(path, 0777)
+func copyFile(fs fs.FS, src, dst string, modifier modifierFunc) error {
+	tmpl, err := fs.Open(src)
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Create(filepath.Join(path, "main.go"))
+	buf := &bytes.Buffer{}
+	_, err = buf.ReadFrom(tmpl)
 	if err != nil {
 		return err
 	}
 
-	tmpl, err := fs.Open("templates/main.go.tmpl")
+	b := buf.Bytes()
+
+	if modifier != nil {
+		b, err = modifier(b)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = os.MkdirAll(filepath.Dir(dst), 0777)
 	if err != nil {
 		return err
 	}
 
-	_, err = io.Copy(f, tmpl)
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+
+	_, err = f.Write(b)
 	if err != nil {
 		return err
 	}
@@ -98,92 +165,5 @@ func mainfile(fs fs.FS, path, projectName string) error {
 	}
 
 	return nil
-}
 
-// defaultHTTPRoutes will create a ./http dir with a http.go file.
-// In this file we will register 1 route and 2 route handlers.
-// The first handle is the home "/" handler.
-// The second handler is a 404 handler.
-func defaultHTTPRoutes(fs fs.FS, path string) error {
-	path = filepath.Join(path, "internal", "http")
-
-	err := os.MkdirAll(path, 0777)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.Create(filepath.Join(path, "http.go"))
-	if err != nil {
-		return err
-	}
-
-	tmpl, err := fs.Open("templates/http/http.go")
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(f, tmpl)
-	if err != nil {
-		return err
-	}
-
-	err = f.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func defaultHomepage(fs fs.FS, path string) error {
-	err := os.Mkdir(filepath.Join(path, "templates"), 0777)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.Create(filepath.Join(path, "templates", "index.html"))
-	if err != nil {
-		return err
-	}
-
-	tmpl, err := fs.Open("templates/views/index.html")
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(f, tmpl)
-	if err != nil {
-		return err
-	}
-
-	err = f.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func defaultConfig(fs fs.FS, path string) error {
-	f, err := os.Create(filepath.Join(path, "config.yml"))
-	if err != nil {
-		return err
-	}
-
-	tmpl, err := fs.Open("templates/config.yml")
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(f, tmpl)
-	if err != nil {
-		return err
-	}
-
-	err = f.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

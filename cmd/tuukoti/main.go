@@ -46,7 +46,7 @@ func runCLI() error {
 
 	switch os.Args[1] {
 	case "list":
-		printCmd("new sitename", "create a new project within the directory of sitename")
+		printCmd("new {mod_url}", "create a new project")
 		printCmd("serve", "serves your app locally")
 		printCmd("build", "build the binary and any resources configured")
 		printCmd("list", "list displays a list of all commands")

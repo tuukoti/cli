@@ -53,7 +53,7 @@ func runCLI() error {
 		printCmd("version", "displays the cli tools current version")
 		fmt.Println("")
 		printHeader("make")
-		printCmd("make resource", "creates a new route file and a ")
+		printCmd("make resource", "creates a new route and a test file")
 	case "version":
 		fmt.Println("")
 		version()

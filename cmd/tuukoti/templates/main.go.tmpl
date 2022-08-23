@@ -10,6 +10,9 @@ import (
 	"github.com/tuukoti/framework/config"
 )
 
+//go:embed views
+var fs embed.FS
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -27,6 +30,13 @@ func run() error {
 	log := logrus.New()
 
 	e := echo.New()
+
+	renderer, err := renderer.New(fs, "views/*.html")
+	if err != nil {
+		return err
+	}
+
+	e.Renderer = renderer
 
 	http.RegisterRoutes(e, log)
 
